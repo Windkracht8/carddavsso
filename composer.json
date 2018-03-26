@@ -1,0 +1,20 @@
+{
+    "name": "roundcube/carddavsso",
+    "type": "roundcube-plugin",
+    "description": "Synchronisation of the primary addressbook via carddav with sso",
+    "keywords": ["carddav","synchronisation","sso"],
+    "license": "GPLv3",
+    "version": "1.0.0",
+    "authors": [
+        {
+            "name": "Bart Vullings",
+            "email": "carddavsso@windkracht8.com"
+        }
+    ]
+	"require": {
+		"php": ">=5.6.18",
+		"roundcube/plugin-installer": ">=0.1.2",
+        "nategood/httpful": "~0.2",
+        "sabre/vobject": ">=3"
+	},
+}
