@@ -1,5 +1,5 @@
 {
-    "name": "roundcube/carddavsso",
+    "name": "windkracht8/carddavsso",
     "type": "roundcube-plugin",
     "description": "Synchronisation of the primary addressbook via carddav with sso",
     "keywords": ["carddav","synchronisation","sso"],
