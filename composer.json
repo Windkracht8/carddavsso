@@ -4,7 +4,6 @@
     "description": "Synchronisation of the primary addressbook via carddav with sso",
     "keywords": ["carddav","synchronisation","sso"],
     "license": "GPLv3",
-    "version": "1.0.0",
     "authors": [
         {
             "name": "Bart Vullings",
