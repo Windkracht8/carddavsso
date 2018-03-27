@@ -5,7 +5,7 @@ class carddavsso_db{
 	private $username;
 	private $dbh;
 	private $prefix;
-	
+
 	static function get_instance(){
 		if(!self::$instance){self::$instance = new carddavsso_db();}
 		return self::$instance;
@@ -16,7 +16,7 @@ class carddavsso_db{
 		$this->dbh = rcmail::get_instance()->db;
 		$this->prefix = $rc->config->get("db_prefix", "");
 	}
-	
+
 	public function get_abook_id($abook_id){
 		$sql = "SELECT * FROM ".$this->prefix."carddavsso_contactsync WHERE username = ? AND abook_id = ?";
 		$sql_result = $this->dbh->query($sql, array($this->username, $abook_id));
@@ -79,26 +79,26 @@ class carddavsso_db{
 		if($db_error = $this->dbh->is_error($sql_result)){$this->handle_error($db_error);return false;}
 		return $sql_result;
 	}
-	
+
 	private function handle_error($error){
 		if(strpos($error, "Table") !== false
 			&& strpos($error, "doesn't exist") !== false
 		){
 			if(strpos($error, "carddavsso_contactsync") !== false){
-				rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Sync table does not exist, create it"), true, false);
+				rcube::raise_error(array('code' => 600, 'type' => 'db', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Sync table does not exist, create it"), true, false);
 				$this->create_table_contactsync();
 			}else if(strpos($error, "carddavsso_contacts") !== false){
-				rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Sync table does not exist, create it"), true, false);
+				rcube::raise_error(array('code' => 600, 'type' => 'db', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Sync table does not exist, create it"), true, false);
 				$this->create_table_contact();
 			}else{
-				rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Unkown table does not exists: $error"), true, false);
+				rcube::raise_error(array('code' => 600, 'type' => 'db', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Unkown table does not exists: $error"), true, false);
 			}
 		}else{
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error in executing db query: $error"), true, false);
+			rcube::raise_error(array('code' => 600, 'type' => 'db', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error in executing db query: $error"), true, false);
 		}
 	}
 	private function create_table_contactsync(){
-		$create_db_sync = 
+		$create_db_sync =
 			"CREATE TABLE IF NOT EXISTS ".$this->prefix."carddavsso_contactsync(".
 				"username VARCHAR(255),abook_id VARCHAR(255),token VARCHAR(255),lastsync INT,lastrecover INT".
 				",UNIQUE KEY unique_index(username,abook_id));";
@@ -106,7 +106,7 @@ class carddavsso_db{
 		if($db_error = $this->dbh->is_error($sql_result)){$this->handle_error($db_error);return false;}
 	}
 	private function create_table_contact(){
-		$create_db_contacts = 
+		$create_db_contacts =
 			"CREATE TABLE IF NOT EXISTS ".$this->prefix."carddavsso_contacts(".
 				"username VARCHAR(255),abook_id VARCHAR(255),contact_id INT,dav_id VARCHAR(255),dav_url VARCHAR(255),etag VARCHAR(255)".
 				",UNIQUE KEY unique_index(username,abook_id,contact_id));";

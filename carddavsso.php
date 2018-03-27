@@ -9,9 +9,9 @@ class carddavsso extends rcube_plugin{
 
 		// load configuration
 		$this->load_config();
-		
+
 		$this->add_hook('startup', array($this, 'startup'));
-		
+
 		$this->add_hook('contact_create', array($this, 'contact_create'));
 		$this->add_hook('contact_update', array($this, 'contact_update'));
 		$this->add_hook('contact_delete', array($this, 'contact_delete'));
@@ -21,7 +21,7 @@ class carddavsso extends rcube_plugin{
 		$this->add_hook('group_create', array($this, 'group_create'));
 		$this->add_hook('group_rename', array($this, 'group_rename'));
 		$this->add_hook('group_delete', array($this, 'group_delete'));
-		
+
 		//TODO: hook into user delete to cleanup db
 	}
 	function startup($params){

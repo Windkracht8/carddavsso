@@ -43,28 +43,24 @@ class carddavsso_contacts{
 
 		$response = $this->makeRequest($abook_url, 'REPORT', $headers, $body);
 		if($response->code != "207"){
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, wrong response code: ".$response->code), true, false);
-			return;
+			rcube::raise_error(array('code' => $response->code, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, wrong response code: ".$response->code), true, true);
 		}
 		$xmlDoc = new DOMDocument();
 		if(!$xmlDoc->loadXML($response->raw_body)){
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, failed to process response as xml"), true, false);
-			return;
+			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, failed to process response as xml"), true, true);
 		}
 
 		$responses = $xmlDoc->getElementsByTagName('response');
 		foreach($responses as $response){
 			$hrefs = $response->getElementsByTagName('href');
 			if(count($hrefs)!= 1){
-				rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, response with ".count($hrefs)." href fields"), true, false);
-				return;
+				rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, response with ".count($hrefs)." href fields"), true, true);
 			}
 			$href = $hrefs[0]->nodeValue;
 
 			$statuss = $response->getElementsByTagName('status');
 			if(count($statuss)!= 1){
-				rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, response with ".count($statuss)." status fields"), true, false);
-				return;
+				rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, response with ".count($statuss)." status fields"), true, true);
 			}
 			$status = $statuss[0]->nodeValue;
 			
@@ -73,14 +69,13 @@ class carddavsso_contacts{
 			}elseif(strpos($status, "404")){
 				$this->fromdav_delete($abook_id, $href);
 			}else{
-				rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, unkown status: $status for contact $href"), true, false);
+				rcube::raise_error(array('code' => $status, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, unkown status: $status for contact $href"), true, false);
 			}
 		}
 		
 		$tokens = $xmlDoc->getElementsByTagName('sync-token');
 		if(count($tokens) != 1){
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, response with ".count($tokens)." sync-token fields"), true, false);
-			return;
+			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, response with ".count($tokens)." sync-token fields"), true, true);
 		}
 		$this->db->set_abook_token($abook_id, $tokens[0]->nodeValue);
 	}
@@ -91,16 +86,14 @@ class carddavsso_contacts{
 		
 		$db_data = $this->db->get_contact_davurl($abook_id, $dav_url);
 		if(!$db_data){
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to delete contact($dav_url), missing sync data"), true, false);
-			return;
+			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to delete contact($dav_url), missing sync data"), true, true);
 		}
 		$contact_id = $db_data['contact_id'];
 
 		$abook = $this->rc->get_address_book($abook_id);
 		$result = $abook->delete(array($contact_id));
 		if($result != "1"){
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to delete contact; local($contact_id); dav($dav_url)"), true, false);
-			return;
+			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to delete contact; local($contact_id); dav($dav_url)"), true, true);
 		}
 		$this->db->del_contact($abook_id, $contact_id);
 	}
@@ -124,14 +117,14 @@ class carddavsso_contacts{
 
 			$success = $abook->update($contact_id, $save_data);
 			if(!$success){
-				rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to update contact; local($contact_id); dav($dav_url)"), true, false);
+				rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to update contact; local($contact_id); dav($dav_url)"), true, false);
 				return -1;
 			}
 			$this->db->set_contact($abook_id, $contact_id, $save_data['dav_id'], $dav_url, $save_data['etag']);
 		}else{
 			$contact_id = $abook->insert($save_data);
 			if($contact_id < 0){
-				rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to create contact; dav($dav_url)"), true, false);
+				rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to create contact; dav($dav_url)"), true, false);
 				return -1;
 			}
 			$response = $this->makeRequest($abook_url.$dav_url, 'GET', array('Content-type'=>'text/vcard; charset="utf-8"'), "");
@@ -187,13 +180,11 @@ class carddavsso_contacts{
 
 		$response = $this->makeRequest($abook_url, 'REPORT', $headers, $body);
 		if($response->code != "207"){
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover (".$this->username."), wrong response code: ".$response->code), true, false);
-			return;
+			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover (".$this->username."), wrong response code: ".$response->code), true, true);
 		}
 		$xmlDoc = new DOMDocument();
 		if(!$xmlDoc->loadXML($response->raw_body)){
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, failed to process response as xml"), true, false);
-			return;
+			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, failed to process response as xml"), true, true);
 		}
 
 		$contacts_dav = array();
@@ -201,23 +192,20 @@ class carddavsso_contacts{
 		foreach($responses as $response){
 			$hrefs = $response->getElementsByTagName('href');
 			if(count($hrefs)!= 1){
-				rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, response with ".count($hrefs)." href fields"), true, false);
-				return;
+				rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, response with ".count($hrefs)." href fields"), true, true);
 			}
 			$href = $hrefs[0]->nodeValue;
 			$dav_url = substr($href,strrpos($href,$abook_url_lastpart, -1)+strlen($abook_url_lastpart));
 			
 			$etags = $response->getElementsByTagName('getetag');
 			if(count($etags)!= 1){
-				rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, response with ".count($etags)." etag fields"), true, false);
-				return;
+				rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, response with ".count($etags)." etag fields"), true, true);
 			}
 			$etag = $etags[0]->nodeValue;
 			
 			$addressdatas = $response->getElementsByTagName('address-data');
 			if(count($addressdatas)!= 1){
-				rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, response with ".count($addressdatas)." address-data fields"), true, false);
-				return;
+				rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, response with ".count($addressdatas)." address-data fields"), true, true);
 			}
 			$name = preg_replace(array('/.*BEGIN:.*/', '/.*FN:/', '/.*END:.*/', '/\r/', '/\n/'), array('', '', '', '', ''), $addressdatas[0]->nodeValue);
 
@@ -258,7 +246,7 @@ class carddavsso_contacts{
 					// Removed from dav, and exists local
 					$result = $abook->delete(array($contact_id));
 					if($result != "1"){
-						rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to remove local contact $contact_id"), true, false);
+						rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to remove local contact $contact_id"), true, false);
 					}else{
 						$this->db->del_contact($abook_id, $contact_id);
 					}
@@ -283,8 +271,7 @@ class carddavsso_contacts{
 			}
 			$contact_id = $this->fromdav_update_davurl($abook_id, $dav_url);
 			if($contact_id == -1){
-				rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to create or update local contact '".$contact_dav['name']."'"), true, false);
-				return;
+				rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to create or update local contact '".$contact_dav['name']."'"), true, true);
 			}
 			unset($contacts_local[$contact_id]);
 		}
@@ -300,18 +287,15 @@ class carddavsso_contacts{
 
 		$response = $this->makeRequest($abook_url, 'PROPFIND', $headers, $body);
 		if($response->code != "207"){
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, wrong response code: ".$response->code), true, false);
-			return;
+			rcube::raise_error(array('code' => $response->code, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, wrong response code: ".$response->code), true, true);
 		}
 		$xmlDoc = new DOMDocument();
 		if(!$xmlDoc->loadXML($response->raw_body)){
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, failed to process response as xml"), true, false);
-			return;
+			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, failed to process response as xml"), true, true);
 		}
 		$synctokens = $xmlDoc->getElementsByTagName('sync-token');
 		if(count($synctokens)!= 1){
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, response with ".count($synctokens)." sync-token fields"), true, false);
-			return;
+			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, response with ".count($synctokens)." sync-token fields"), true, true);
 		}
 		$synctoken = $synctokens[0]->nodeValue;
 		
@@ -570,21 +554,19 @@ class carddavsso_contacts{
 		
 		$response = $this->makeRequest($abook_url.$dav_url, 'GET', $headers, '');
 		if($response->code != "200"){
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Getting DAV data for $dav_url failed, wrong response code: ".$response->code), true, false);
-			return;
+			rcube::raise_error(array('code' => $response->code, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Getting DAV data for $dav_url failed, wrong response code: ".$response->code), true, true);
 		}
 
 		try{
 			$dav_vcard = VObject\Reader::read($response->raw_body, VObject\Reader::OPTION_FORGIVING);
 		}catch(Exception $e){
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Getting DAV data for $dav_url failed, couldn't parse vcard"), true, false);
-			return false;
+			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Getting DAV data for $dav_url failed, couldn't parse vcard"), true, true);
 		}
 
 		// Step 2: Fill roundcube style array
 		$save_data = array();
 		if(!isset($dav_vcard->UID)){
-			rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Getting DAV data for $dav_url failed, no UID"), true, false);
+			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Getting DAV data for $dav_url failed, no UID"), true, false);
 			return $save_data;
 		}
 		$save_data['dav_id'] = (string)$dav_vcard->UID;
@@ -957,7 +939,7 @@ class carddavsso_contacts{
 					// ignore, these are roundcube/dav fields
 					break;
 				default:
-					rcube::raise_error(array('code' => 600, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error converting local to DAV, unkown key:  $key"), true, false);
+					rcube::raise_error(array('code' => 404, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error converting local to DAV, unkown key:  $key"), true, false);
 			}
 			/* @FIXME These fields don't have a contact field:
 				X-PHONETIC-FIRST-NAME
@@ -979,7 +961,7 @@ class carddavsso_contacts{
 	private function makeRequest($request_url, $request_method, $request_headers, $request_body){
 		$httpful = \Httpful\Request::init();
 		$httpful->basicAuth($this->username, $this->password);
-		$httpful->addHeader("User-Agent", "RCM carddavsso plugin/dev");
+		$httpful->addHeader("User-Agent", "roundcube_carddavsso");
 		$httpful->uri($request_url);
 		$httpful->method($request_method);
 		if(is_array($request_headers)){
