@@ -3,7 +3,8 @@
     "type": "roundcube-plugin",
     "description": "Synchronisation of the primary addressbook via carddav with sso",
     "keywords": ["carddav","synchronisation","sso"],
-    "license": "GPLv3",
+    "license": "GPLv3+",
+    "version": "live",
     "authors": [
         {
             "name": "Bart Vullings",

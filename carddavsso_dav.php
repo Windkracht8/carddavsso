@@ -1,47 +1,29 @@
 <?php
-include_once 'db.php';
+require_once (dirname(__FILE__).'/carddavsso_db.php');
 
 use Sabre\VObject;
 
-class carddavsso_contacts{
-	static private $instance;
-	private $rc;
-	private $db;
-	private $username;
-	private $password;
-	private $abook_url;
-	
-	static function get_instance(){
-		if(!self::$instance){self::$instance = new carddavsso_contacts();}
-		return self::$instance;
-	}
-	private function __construct(){
-		$this->rc = rcube::get_instance();
-		$this->db = carddavsso_db::get_instance();
-		$this->username = $this->rc->get_user_name();
-		$this->password = $this->rc->get_user_password();
-	}
-
-	public function sync($abook_id){
-		$abook_dbresult = $this->db->get_abook_id($abook_id);
+class carddavsso_dav{
+	public static function sync($abook_id){
+		$abook_dbresult = carddavsso_db::get_instance()->get_abook_id($abook_id);
 		if(!isset($abook_dbresult['token']) || $abook_dbresult['token'] == ''){
 			return; // Wait for recover to run first
 		}
 		if(isset($abook_dbresult['lastsync'])){
-			$syncinterval = $this->rc->config->get("carddavsso_syncinterval", 5);
+			$syncinterval = rcube::get_instance()->config->get("carddavsso_syncinterval", 5);
 			if(time() < ($abook_dbresult['lastsync'] + $syncinterval)){
 				return;// Not time yet to run another sync
 			}
 		}
 
-		$this->db->set_abook_lastsync($abook_id, time());
+		carddavsso_db::get_instance()->set_abook_lastsync($abook_id, time());
 		
-		if(!$abook_url = $this->getUrlForBook($abook_id)){return;}
+		if(!$abook_url = self::getUrlForBook($abook_id)){return;}
 		$headers = array('Depth'=>'0', 'Content-type'=>'text/xml; charset="utf-8"');
 		$body = '<?xml version="1.0" encoding="utf-8" ?><D:sync-collection xmlns:D="DAV:"><D:sync-token>%TOKEN%</D:sync-token><D:sync-level>infinite</D:sync-level></D:sync-collection>';
 		$body = str_replace("%TOKEN%", $abook_dbresult['token'], $body);
 
-		$response = $this->makeRequest($abook_url, 'REPORT', $headers, $body);
+		$response = self::makeRequest($abook_url, 'REPORT', $headers, $body);
 		if($response->code != "207"){
 			rcube::raise_error(array('code' => $response->code, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, wrong response code: ".$response->code), true, true);
 		}
@@ -65,9 +47,9 @@ class carddavsso_contacts{
 			$status = $statuss[0]->nodeValue;
 			
 			if(strpos($status, "200")){
-				$this->fromdav_update($abook_id, $href);
+				self::fromdav_update($abook_id, $href);
 			}elseif(strpos($status, "404")){
-				$this->fromdav_delete($abook_id, $href);
+				self::fromdav_delete($abook_id, $href);
 			}else{
 				rcube::raise_error(array('code' => $status, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, unkown status: $status for contact $href"), true, false);
 			}
@@ -77,38 +59,38 @@ class carddavsso_contacts{
 		if(count($tokens) != 1){
 			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during sync, response with ".count($tokens)." sync-token fields"), true, true);
 		}
-		$this->db->set_abook_token($abook_id, $tokens[0]->nodeValue);
+		carddavsso_db::get_instance()->set_abook_token($abook_id, $tokens[0]->nodeValue);
 	}
-	private function fromdav_delete($abook_id, $href){
-		if(!$abook_url = $this->getUrlForBook($abook_id)){return;}
+	private static function fromdav_delete($abook_id, $href){
+		if(!$abook_url = self::getUrlForBook($abook_id)){return;}
 		$abook_url_lastpart = substr($abook_url,strrpos($abook_url,'/',-2));
 		$dav_url = substr($href,strrpos($href,$abook_url_lastpart, -1)+strlen($abook_url_lastpart));
 		
-		$db_data = $this->db->get_contact_davurl($abook_id, $dav_url);
+		$db_data = carddavsso_db::get_instance()->get_contact_davurl($abook_id, $dav_url);
 		if(!$db_data){
 			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to delete contact($dav_url), missing sync data"), true, true);
 		}
 		$contact_id = $db_data['contact_id'];
 
-		$abook = $this->rc->get_address_book($abook_id);
+		$abook = rcube::get_instance()->get_address_book($abook_id);
 		$result = $abook->delete(array($contact_id));
 		if($result != "1"){
 			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to delete contact; local($contact_id); dav($dav_url)"), true, true);
 		}
-		$this->db->del_contact($abook_id, $contact_id);
+		carddavsso_db::get_instance()->del_contact($abook_id, $contact_id);
 	}
-	private function fromdav_update($abook_id, $href){
-		if(!$abook_url = $this->getUrlForBook($abook_id)){return;}
+	private static function fromdav_update($abook_id, $href){
+		if(!$abook_url = self::getUrlForBook($abook_id)){return;}
 		$abook_url_lastpart = substr($abook_url,strrpos($abook_url,'/',-2));
 		$dav_url = substr($href,strrpos($href,$abook_url_lastpart, -1)+strlen($abook_url_lastpart));
-		$this->fromdav_update_davurl($abook_id, $dav_url);
+		self::fromdav_update_davurl($abook_id, $dav_url);
 	}
-	private function fromdav_update_davurl($abook_id, $dav_url){
-		if(!$abook_url = $this->getUrlForBook($abook_id)){return;}
-		$save_data = $this->dav2rcube($abook_id, $dav_url);
+	private static function fromdav_update_davurl($abook_id, $dav_url){
+		if(!$abook_url = self::getUrlForBook($abook_id)){return;}
+		$save_data = self::dav2rcube($abook_id, $dav_url);
 		
-		$abook = $this->rc->get_address_book($abook_id);
-		$db_data = $this->db->get_contact_davurl($abook_id, $dav_url);
+		$abook = rcube::get_instance()->get_address_book($abook_id);
+		$db_data = carddavsso_db::get_instance()->get_contact_davurl($abook_id, $dav_url);
 		if($db_data){
 			$contact_id = $db_data['contact_id'];
 			if($save_data['etag'] == $db_data['etag']){
@@ -120,22 +102,22 @@ class carddavsso_contacts{
 				rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to update contact; local($contact_id); dav($dav_url)"), true, false);
 				return -1;
 			}
-			$this->db->set_contact($abook_id, $contact_id, $save_data['dav_id'], $dav_url, $save_data['etag']);
+			carddavsso_db::get_instance()->set_contact($abook_id, $contact_id, $save_data['dav_id'], $dav_url, $save_data['etag']);
 		}else{
 			$contact_id = $abook->insert($save_data);
 			if($contact_id < 0){
 				rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to create contact; dav($dav_url)"), true, false);
 				return -1;
 			}
-			$response = $this->makeRequest($abook_url.$dav_url, 'GET', array('Content-type'=>'text/vcard; charset="utf-8"'), "");
+			$response = self::makeRequest($abook_url.$dav_url, 'GET', array('Content-type'=>'text/vcard; charset="utf-8"'), "");
 			$etag = isset($response->headers['etag']) ? $response->headers['etag'] : '';
-			$this->db->set_contact($abook_id, $contact_id, $save_data['dav_id'], $dav_url, $etag);
+			carddavsso_db::get_instance()->set_contact($abook_id, $contact_id, $save_data['dav_id'], $dav_url, $etag);
 		}
 
-		$this->fromdav_putcontactingroups($abook, $contact_id, $save_data['groups']);
+		self::fromdav_putcontactingroups($abook, $contact_id, $save_data['groups']);
 		return $contact_id;
 	}
-	private function fromdav_putcontactingroups($abook, $contact_id, $dav_groups){
+	private static function fromdav_putcontactingroups($abook, $contact_id, $dav_groups){
 		$local_groups = $abook->list_groups();
 		if(is_array($dav_groups)){foreach($dav_groups as $dav_group){
 			$local_group_id = -1;
@@ -160,27 +142,27 @@ class carddavsso_contacts{
 		}
 	}
 
-	public function recover($abook_id){
-		$abook_dbresult = $this->db->get_abook_id($abook_id);
+	public static function recover($abook_id){
+		$abook_dbresult = carddavsso_db::get_instance()->get_abook_id($abook_id);
 		if(isset($abook_dbresult['lastrecover'])){
-			$recoverinterval = $this->rc->config->get("carddavsso_recoverinterval", 300);
+			$recoverinterval = rcube::get_instance()->config->get("carddavsso_recoverinterval", 300);
 			if(time() < ($abook_dbresult['lastrecover'] + $recoverinterval)){
 				return; // Not time yet to run recover again
 			}
 		}
 
-		$this->db->set_abook_lastrecover($abook_id, time());
+		carddavsso_db::get_instance()->set_abook_lastrecover($abook_id, time());
 
 		// Step 1: Grab list of dav_urls from server
-		if(!$abook_url = $this->getUrlForBook($abook_id)){return;}
+		if(!$abook_url = self::getUrlForBook($abook_id)){return;}
 		$abook_url_lastpart = substr($abook_url,strrpos($abook_url,'/',-2));
 
 		$headers = array('Content-type'=>'text/xml; charset="utf-8"');
 		$body = '<?xml version="1.0" encoding="utf-8" ?><C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:prop><D:getetag /><C:address-data><C:prop name="FN"/></C:address-data></D:prop></C:addressbook-query>';
 
-		$response = $this->makeRequest($abook_url, 'REPORT', $headers, $body);
+		$response = self::makeRequest($abook_url, 'REPORT', $headers, $body);
 		if($response->code != "207"){
-			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover (".$this->username."), wrong response code: ".$response->code), true, true);
+			rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, wrong response code: ".$response->code), true, true);
 		}
 		$xmlDoc = new DOMDocument();
 		if(!$xmlDoc->loadXML($response->raw_body)){
@@ -214,13 +196,13 @@ class carddavsso_contacts{
 
 		// Step 2: Create a list of the local contacts
 		$contacts_local = array();
-		$abook = $this->rc->get_address_book($abook_id);
+		$abook = rcube::get_instance()->get_address_book($abook_id);
 		foreach($abook->list_records(null, 2147483647)->records as $record){
 			$contacts_local[$record['contact_id']] = $record['name'];
 		}
 
 		// Step 3: Loop db entries
-		$contacts_db = $this->db->get_contactdatas($abook_id);
+		$contacts_db = carddavsso_db::get_instance()->get_contactdatas($abook_id);
 		foreach($contacts_db as $contact_db){
 			$dav_url = $contact_db['dav_url'];
 			$contact_id = $contact_db['contact_id'];
@@ -230,14 +212,14 @@ class carddavsso_contacts{
 					// Exists on dav, and exists local
 					if($contacts_dav[$dav_url]['etag'] != $contact_db['etag']){
 						// Updated on dav
-						$this->fromdav_update_davurl($abook_id, $dav_url);
+						self::fromdav_update_davurl($abook_id, $dav_url);
 					}
 					unset($contacts_dav[$dav_url]);
 					unset($contacts_local[$contact_id]);
 				}else{
 					// Exists on dav, does not exists local
-					$this->db->del_contact($abook_id, $contact_id);
-					$this->fromdav_update_davurl($abook_id, $dav_url);
+					carddavsso_db::get_instance()->del_contact($abook_id, $contact_id);
+					self::fromdav_update_davurl($abook_id, $dav_url);
 					unset($contacts_dav[$dav_url]);
 				}
 			}else{
@@ -248,11 +230,11 @@ class carddavsso_contacts{
 					if($result != "1"){
 						rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to remove local contact $contact_id"), true, false);
 					}else{
-						$this->db->del_contact($abook_id, $contact_id);
+						carddavsso_db::get_instance()->del_contact($abook_id, $contact_id);
 					}
 				}else{
 					// Removed from dav, and removed from local
-					$this->db->del_contact($abook_id, $contact_id);
+					carddavsso_db::get_instance()->del_contact($abook_id, $contact_id);
 				}
 			}
 		}
@@ -267,9 +249,9 @@ class carddavsso_contacts{
 				}
 			}
 			if($contact_id > -1){
-				$this->db->set_contact($abook_id, $contact_id, "", $dav_url, "");
+				carddavsso_db::get_instance()->set_contact($abook_id, $contact_id, "", $dav_url, "");
 			}
-			$contact_id = $this->fromdav_update_davurl($abook_id, $dav_url);
+			$contact_id = self::fromdav_update_davurl($abook_id, $dav_url);
 			if($contact_id == -1){
 				rcube::raise_error(array('code' => 500, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Failed to create or update local contact '".$contact_dav['name']."'"), true, true);
 			}
@@ -278,14 +260,14 @@ class carddavsso_contacts{
 
 		// Step 5: Loop remaining local contacts, these were not in the db and not on dav
 		foreach($contacts_local as $contact_id => $contact_name){
-			$save_data = $this->fromlocal_getdata($abook_id, $contact_id);
-			$this->fromlocal_upload($abook_id, $save_data, $contact_id);
+			$save_data = self::fromlocal_getdata($abook_id, $contact_id);
+			self::fromlocal_upload($abook_id, $save_data, $contact_id);
 		}
 
 		$headers = array('Content-type'=>'text/xml; charset="utf-8"', 'Depth'=>'0');
 		$body = '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:sync-token /></D:prop></D:propfind>';
 
-		$response = $this->makeRequest($abook_url, 'PROPFIND', $headers, $body);
+		$response = self::makeRequest($abook_url, 'PROPFIND', $headers, $body);
 		if($response->code != "207"){
 			rcube::raise_error(array('code' => $response->code, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Error during recover, wrong response code: ".$response->code), true, true);
 		}
@@ -299,42 +281,42 @@ class carddavsso_contacts{
 		}
 		$synctoken = $synctokens[0]->nodeValue;
 		
-		$this->db->set_abook_token($abook_id, $synctoken);
+		carddavsso_db::get_instance()->set_abook_token($abook_id, $synctoken);
 	}
 	
-	public function fromlocal_create($parameters){
+	public static function fromlocal_create($parameters){
 		$parameters['abort'] = 1;
 		$abook_id = $parameters['source'];
 
-		$result = $this->fromlocal_upload($abook_id, $parameters['record'], null);
+		$result = self::fromlocal_upload($abook_id, $parameters['record'], null);
 		if($result['error']){
 			$parameters['message'] = $result['error'];
 			return $parameters;
 		}
 
-		$abook = $this->rc->get_address_book($abook_id);
+		$abook = rcube::get_instance()->get_address_book($abook_id);
 		$contact_id = $abook->insert($parameters['record']);
 
-		$this->db->set_contact($abook_id, $contact_id, $result['dav_id'], $result['dav_url'], $result['etag']);
+		carddavsso_db::get_instance()->set_contact($abook_id, $contact_id, $result['dav_id'], $result['dav_url'], $result['etag']);
 
 		$parameters['result'] = $contact_id;
 		return $parameters;
 	}
-	private function generateUID($abook_url){
+	private static function generateUID($abook_url){
 		$method = 'GET';
 		$headers = array('Content-type'=>'text/vcard; charset="utf-8"');
 		$uid = uniqid();
-		$response = $this->makeRequest($abook_url.$uid.".vcf", $method, $headers, "");
+		$response = self::makeRequest($abook_url.$uid.".vcf", $method, $headers, "");
 		if($response->code == "404"){
 			return $uid;
 		}
-		return $this->generateUID($abook_url);
+		return self::generateUID($abook_url);
 	}
-	private function fromlocal_getdata($abook_id, $contact_id){
-		$abook = $this->rc->get_address_book($abook_id);
+	private static function fromlocal_getdata($abook_id, $contact_id){
+		$abook = rcube::get_instance()->get_address_book($abook_id);
 		$records = $abook->get_record($contact_id);
 		$save_data = $records->records[0];
-		$db_data = $this->db->get_contact_id($abook_id, $contact_id);
+		$db_data = carddavsso_db::get_instance()->get_contact_id($abook_id, $contact_id);
 		if(isset($db_data['dav_id'])){$save_data['dav_id'] = $db_data['dav_id'];}
 		if(isset($db_data['dav_url'])){$save_data['dav_url'] = $db_data['dav_url'];}
 		if(isset($db_data['etag'])){$save_data['etag'] = $db_data['etag'];}
@@ -344,12 +326,12 @@ class carddavsso_contacts{
 		
 		return $save_data;
 	}
-	private function fromlocal_upload($abook_id, $save_data, $contact_id){
-		if(!$abook_url = $this->getUrlForBook($abook_id)){return "No url for abook on dav";}
-		$dav_id = isset($save_data['dav_id']) ? $save_data['dav_id'] : $this->generateUID($abook_url);
+	private static function fromlocal_upload($abook_id, $save_data, $contact_id){
+		if(!$abook_url = self::getUrlForBook($abook_id)){return "No url for abook on dav";}
+		$dav_id = isset($save_data['dav_id']) ? $save_data['dav_id'] : self::generateUID($abook_url);
 		$dav_url = isset($save_data['dav_url']) ? $save_data['dav_url'] : $dav_id.".vcf";
 		$headers = array('Content-type'=>'text/vcard; charset="utf-8"');
-		$vcard = $this->rcube2dav($save_data);
+		$vcard = self::rcube2dav($save_data);
 		$vcard->UID = $dav_id;
 		$body = $vcard->serialize();
 
@@ -358,25 +340,25 @@ class carddavsso_contacts{
 		}
 
 		// Upload to dav
-		$response = $this->makeRequest($abook_url.$dav_url, 'PUT', $headers, $body);
+		$response = self::makeRequest($abook_url.$dav_url, 'PUT', $headers, $body);
 		if($response->code != "201" && $response->code != "204"){
 			return array("error" => "Failed to upload contact to dav: ".$response->code.": $response");
 		}
 		// Get the etag
-		$response = $this->makeRequest($abook_url.$dav_url, 'GET', $headers, "");
+		$response = self::makeRequest($abook_url.$dav_url, 'GET', $headers, "");
 		$etag = isset($response->headers['etag']) ? $response->headers['etag'] : '';
 
 		// Add the contact to the db
 		if($contact_id){
-			$this->db->set_contact($abook_id, $contact_id, $dav_id, $dav_url, $etag);
+			carddavsso_db::get_instance()->set_contact($abook_id, $contact_id, $dav_id, $dav_url, $etag);
 		}
 		return array("dav_id" => $dav_id, "dav_url" => $dav_url, "etag" => $etag);
 	}
-	public function fromlocal_update($parameters){
+	public static function fromlocal_update($parameters){
 		$abook_id = $parameters['source'];
 		$contact_id = $parameters['id'];
 		
-		$db_data = $this->db->get_contact_id($abook_id, $contact_id);
+		$db_data = carddavsso_db::get_instance()->get_contact_id($abook_id, $contact_id);
 		if(!isset($db_data['dav_id']) || !isset($db_data['dav_url'])){
 			$parameters['message'] = "Failed to update contact: Did not find dav id in sync db";
 			$parameters['abort'] = 1;
@@ -385,11 +367,11 @@ class carddavsso_contacts{
 		
 		$save_data = $parameters['record'];
 
-		$db_data = $this->db->get_contact_id($abook_id, $contact_id);
+		$db_data = carddavsso_db::get_instance()->get_contact_id($abook_id, $contact_id);
 		$save_data['dav_id'] = $db_data['dav_id'];
 		$save_data['dav_url'] = $db_data['dav_url'];
 
-		$abook = $this->rc->get_address_book($abook_id);
+		$abook = rcube::get_instance()->get_address_book($abook_id);
 		$record_groups = $abook->get_record_groups($contact_id);
 		$save_data['groups'] = trim(implode(",", $record_groups), ",");
 
@@ -401,7 +383,7 @@ class carddavsso_contacts{
 			}
 		}
 
-		$result = $this->fromlocal_upload($abook_id, $save_data, $contact_id);
+		$result = self::fromlocal_upload($abook_id, $save_data, $contact_id);
 		if($result['error']){
 			$parameters['message'] = $result['error'];
 			$parameters['abort'] = 1;
@@ -410,10 +392,10 @@ class carddavsso_contacts{
 
 		return $parameters;
 	}
-	public function fromlocal_delete($parameters){
+	public static function fromlocal_delete($parameters){
 		$abook_id = $parameters['source'];
 		foreach($parameters['id'] as $contact_id){
-			$result = $this->db->get_contact_id($abook_id, $contact_id);
+			$result = carddavsso_db::get_instance()->get_contact_id($abook_id, $contact_id);
 			if(isset($result['dav_url']) && strlen($result['dav_url']) > 5){
 				$dav_url = $result['dav_url'];
 			}else{
@@ -422,13 +404,13 @@ class carddavsso_contacts{
 				return $parameters;
 			}
 
-			if(!$abook_url = $this->getUrlForBook($abook_id)){
+			if(!$abook_url = self::getUrlForBook($abook_id)){
 				$parameters['message'] = "Failed to delete contact: Did not find DAV server url for addressbook";
 				$parameters['abort'] = 1;
 				return $parameters;
 			}
 			// Delete the contact from the server
-			$response = $this->makeRequest($abook_url.$dav_url, 'DELETE', "", "");
+			$response = self::makeRequest($abook_url.$dav_url, 'DELETE', "", "");
 			if($response->code != "204"){
 				$parameters['message'] = "Failed to delete contact: ".$response->code.": $response";
 				$parameters['abort'] = 1;
@@ -438,17 +420,17 @@ class carddavsso_contacts{
 		return $parameters;
 	}
 	
-	public function fromlocal_groupaddmembers($parameters){
+	public static function fromlocal_groupaddmembers($parameters){
 		$group_id = $parameters['group_id'];
 		$abook_id = $parameters['source'];
 		$contact_ids = $parameters['ids'];
-		$abook = $this->rc->get_address_book($abook_id);
+		$abook = rcube::get_instance()->get_address_book($abook_id);
 		$group_name = $abook->get_group($group_id)['name'];
 		
 		foreach($contact_ids as $contact_id){
-			$save_data = $this->fromlocal_getdata($abook_id, $contact_id);
+			$save_data = self::fromlocal_getdata($abook_id, $contact_id);
 			$save_data['groups'] = trim(implode(",",array($group_name, $save_data['groups'])),",");
-			$result = $this->fromlocal_upload($abook_id, $save_data);
+			$result = self::fromlocal_upload($abook_id, $save_data);
 			if($result['error']){
 				$parameters['message'] = "Failed to add $contact_id to $group_name on dav";
 				$parameters['abort'] = 1;
@@ -458,16 +440,16 @@ class carddavsso_contacts{
 		
 		return $parameters;
 	}
-	public function fromlocal_groupdelmembers($parameters){
+	public static function fromlocal_groupdelmembers($parameters){
 		// TODO: if this is the last, it causes an error in the logging
 		$group_id = $parameters['group_id'];
 		$abook_id = $parameters['source'];
 		$contact_ids = $parameters['ids'];
-		$abook = $this->rc->get_address_book($abook_id);
+		$abook = rcube::get_instance()->get_address_book($abook_id);
 		$group_name = $abook->get_group($group_id)['name'];
 
 		foreach($contact_ids as $contact_id){
-			$save_data = $this->fromlocal_getdata($abook_id, $contact_id);
+			$save_data = self::fromlocal_getdata($abook_id, $contact_id);
 			$record_groups = $abook->get_record_groups($contact_id);
 			$groups = "";
 			foreach($record_groups as $record_group){
@@ -477,7 +459,7 @@ class carddavsso_contacts{
 			}
 			$save_data['groups'] = trim($groups, ",");
 			
-			$result = $this->fromlocal_upload($abook_id, $save_data, $contact_id);
+			$result = self::fromlocal_upload($abook_id, $save_data, $contact_id);
 			if($result['error']){
 				$parameters['message'] = "Failed to remove $contact_id from $group_name on dav";
 				$parameters['abort'] = 1;
@@ -487,14 +469,14 @@ class carddavsso_contacts{
 
 		return $parameters;
 	}
-	public function fromlocal_groupcreate($parameters){
+	public static function fromlocal_groupcreate($parameters){
 		if(strpos($parameters['name'], ',') !== false){
 			$parameters['message'] = "Group name cannot have a comma(,)";
 			$parameters['abort'] = 1;
 		}
 		return $parameters;
 	}
-	public function fromlocal_grouprename($parameters){
+	public static function fromlocal_grouprename($parameters){
 		if(strpos($parameters['name'], ',') !== false){
 			$parameters['message'] = "Group name cannot have a comma(,)";
 			$parameters['abort'] = 1;
@@ -505,32 +487,32 @@ class carddavsso_contacts{
 		$newname = $parameters['name'];
 
 		$abook_id = $parameters['source'];
-		$abook = $this->rc->get_address_book($abook_id);
+		$abook = rcube::get_instance()->get_address_book($abook_id);
 		
 		$abook->set_group($group_id);
 		$list = $abook->list_records();
 		foreach($list->records as $record){
-			$save_data = $this->fromlocal_getdata($abook_id, $record['ID']);
+			$save_data = self::fromlocal_getdata($abook_id, $record['ID']);
 
 			$groups = $abook->get_record_groups($record['ID']);
 			$groups[$group_id] = $newname;
 			$save_data['groups'] = implode(",", $groups);
 
-			$this->fromlocal_upload($abook_id, $save_data, $contact_id);
+			self::fromlocal_upload($abook_id, $save_data, $contact_id);
 		}
 		$abook->set_group(null);
 		
 		return $parameters;
 	}
-	public function fromlocal_groupdelete($parameters){
+	public static function fromlocal_groupdelete($parameters){
 		$abook_id = $parameters['source'];
 		$group_id = $parameters['group_id'];
 
-		$abook = $this->rc->get_address_book($abook_id);
+		$abook = rcube::get_instance()->get_address_book($abook_id);
 		$abook->set_group($group_id);
 		$list = $abook->list_records();
 		foreach($list->records as $record){
-			$save_data = $this->fromlocal_getdata($abook_id, $record['ID']);
+			$save_data = self::fromlocal_getdata($abook_id, $record['ID']);
 
 			$groups = $abook->get_record_groups($record['ID']);
 			if(sizeof($groups) < 2){
@@ -540,19 +522,19 @@ class carddavsso_contacts{
 				$save_data['groups'] = trim(implode(",", $groups), ",");
 			}
 
-			$this->fromlocal_upload($abook_id, $save_data, $contact_id);
+			self::fromlocal_upload($abook_id, $save_data, $contact_id);
 		}
 		$abook->set_group(null);
 
 		return $parameters;
 	}
 	
-	private function dav2rcube($abook_id, $dav_url){
+	private static function dav2rcube($abook_id, $dav_url){
 		// Step 1: Get DAV data
-		if(!$abook_url = $this->getUrlForBook($abook_id)){return;}
+		if(!$abook_url = self::getUrlForBook($abook_id)){return;}
 		$headers = array('Content-type'=>'text/vcard; charset="utf-8"');
 		
-		$response = $this->makeRequest($abook_url.$dav_url, 'GET', $headers, '');
+		$response = self::makeRequest($abook_url.$dav_url, 'GET', $headers, '');
 		if($response->code != "200"){
 			rcube::raise_error(array('code' => $response->code, 'type' => 'php', 'file' => __FILE__, 'line' => __LINE__, 'message' => "Getting DAV data for $dav_url failed, wrong response code: ".$response->code), true, true);
 		}
@@ -758,7 +740,7 @@ class carddavsso_contacts{
 
 		return $save_data;
 	}
-	private function rcube2dav($record){
+	private static function rcube2dav($record){
 		$vcard = new VObject\Component\VCard;
 		$vcard->KIND = "individual";
 		$vcard->PRODID = "roundcube_carddavsso";
@@ -949,18 +931,15 @@ class carddavsso_contacts{
 
 		return $vcard;
 	}
-	private function getUrlForBook($abook_id){
-		if(strlen($this->abook_url) < 5){
-			$davserver = str_replace("%USER%", $this->username, $this->rc->config->get('carddavsso_davserver'));
-			$dav_url = $this->rc->config->get("carddavsso_contacts_default");
-			$this->abook_url = $davserver.$dav_url;
-		}
-		return $this->abook_url;
+	private static function getUrlForBook($abook_id){
+		$davserver = str_replace("%USER%", rcube::get_instance()->get_user_name(), rcube::get_instance()->config->get('carddavsso_davserver'));
+		$dav_url = rcube::get_instance()->config->get("carddavsso_defaultabook");
+		return $davserver.$dav_url;
 	}
 	
-	private function makeRequest($request_url, $request_method, $request_headers, $request_body){
+	private static function makeRequest($request_url, $request_method, $request_headers, $request_body){
 		$httpful = \Httpful\Request::init();
-		$httpful->basicAuth($this->username, $this->password);
+		$httpful->basicAuth(rcube::get_instance()->get_user_name(), rcube::get_instance()->get_user_password());
 		$httpful->addHeader("User-Agent", "roundcube_carddavsso");
 		$httpful->uri($request_url);
 		$httpful->method($request_method);

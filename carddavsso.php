@@ -1,5 +1,5 @@
 <?php
-include_once 'contacts.php';
+require_once (dirname(__FILE__).'/carddavsso_dav.php');
 
 class carddavsso extends rcube_plugin{
 
@@ -9,9 +9,9 @@ class carddavsso extends rcube_plugin{
 
 		// load configuration
 		$this->load_config();
-
+		
 		$this->add_hook('startup', array($this, 'startup'));
-
+		
 		$this->add_hook('contact_create', array($this, 'contact_create'));
 		$this->add_hook('contact_update', array($this, 'contact_update'));
 		$this->add_hook('contact_delete', array($this, 'contact_delete'));
@@ -21,45 +21,45 @@ class carddavsso extends rcube_plugin{
 		$this->add_hook('group_create', array($this, 'group_create'));
 		$this->add_hook('group_rename', array($this, 'group_rename'));
 		$this->add_hook('group_delete', array($this, 'group_delete'));
-
+		
 		//TODO: hook into user delete to cleanup db
 	}
 	function startup($params){
-		carddavsso_contacts::get_instance()->sync('0');
-		carddavsso_contacts::get_instance()->recover('0');
+		carddavsso_dav::sync('0');
+		carddavsso_dav::recover('0');
 		return $params;
 	}
 	function contact_create($parameters){
 		if($parameters['source'] != "0"){return;}
-		return carddavsso_contacts::get_instance()->fromlocal_create($parameters);
+		return carddavsso_dav::fromlocal_create($parameters);
 	}
 	function contact_update($parameters){
 		if($parameters['source'] != "0"){return;}
-		return carddavsso_contacts::get_instance()->fromlocal_update($parameters);
+		return carddavsso_dav::fromlocal_update($parameters);
 	}
 	function contact_delete($parameters){
 		if($parameters['source'] != "0"){return;}
-		return carddavsso_contacts::get_instance()->fromlocal_delete($parameters);
+		return carddavsso_dav::fromlocal_delete($parameters);
 	}
 	function group_addmembers($parameters){
 		if($parameters['source'] != "0"){return;}
-		return carddavsso_contacts::get_instance()->fromlocal_groupaddmembers($parameters);
+		return carddavsso_dav::fromlocal_groupaddmembers($parameters);
 	}
 	function group_delmembers($parameters){
 		if($parameters['source'] != "0"){return;}
-		return carddavsso_contacts::get_instance()->fromlocal_groupdelmembers($parameters);
+		return carddavsso_dav::fromlocal_groupdelmembers($parameters);
 	}
 	function group_create($parameters){
 		if($parameters['source'] != "0"){return;}
-		return carddavsso_contacts::get_instance()->fromlocal_groupcreate($parameters);
+		return carddavsso_dav::fromlocal_groupcreate($parameters);
 	}
 	function group_rename($parameters){
 		if($parameters['source'] != "0"){return;}
-		return carddavsso_contacts::get_instance()->fromlocal_grouprename($parameters);
+		return carddavsso_dav::fromlocal_grouprename($parameters);
 	}
 	function group_delete($parameters){
 		if($parameters['source'] != "0"){return;}
-		return carddavsso_contacts::get_instance()->fromlocal_groupdelete($parameters);
+		return carddavsso_dav::fromlocal_groupdelete($parameters);
 	}
 
 }

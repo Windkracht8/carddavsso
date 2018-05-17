@@ -7,6 +7,6 @@ $config['carddavsso_recoverinterval'] = 300;
 $config['carddavsso_syncinterval'] = 5;
 
 /* Location of the default addressbook */
-$config['carddavsso_contacts_default'] = "addresses/";
+$config['carddavsso_defaultabook'] = "addresses/";
 
 
