@@ -22,7 +22,7 @@ class carddavsso extends rcube_plugin{
 		$this->add_hook('group_rename', array($this, 'group_rename'));
 		$this->add_hook('group_delete', array($this, 'group_delete'));
 		
-		//TODO: hook into user delete to cleanup db
+		$this->add_hook('user_delete', array($this, 'user_delete'));
 	}
 	function startup($params){
 		carddavsso_dav::sync('0');
@@ -60,6 +60,9 @@ class carddavsso extends rcube_plugin{
 	function group_delete($parameters){
 		if($parameters['source'] != "0"){return;}
 		return carddavsso_dav::fromlocal_groupdelete($parameters);
+	}
+	function user_delete($args){
+		carddavsso_db::get_instance()->del_user($args['user']->ID);
 	}
 
 }

@@ -79,6 +79,17 @@ class carddavsso_db{
 		if($db_error = $this->dbh->is_error($sql_result)){$this->handle_error($db_error);return false;}
 		return $sql_result;
 	}
+
+	public function del_user($username){
+		$sql = "DELETE FROM ".$this->prefix."carddavsso_contacts WHERE username = ?;";
+		$sql_result = $this->dbh->query($sql, array($username));
+		if($db_error = $this->dbh->is_error($sql_result)){$this->handle_error($db_error);return false;}
+		
+		$sql = "DELETE FROM ".$this->prefix."carddavsso_abooks WHERE username = ?;";
+		$sql_result = $this->dbh->query($sql, array($username));
+		if($db_error = $this->dbh->is_error($sql_result)){$this->handle_error($db_error);return false;}
+		return true;
+	}
 	
 	private function handle_error($error){
 		if(strpos($error, "Table") !== false
