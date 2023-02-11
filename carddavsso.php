@@ -25,8 +25,8 @@ class carddavsso extends rcube_plugin{
 		$this->add_hook('user_delete', array($this, 'user_delete'));
 	}
 	function startup($params){
-		carddavsso_dav::sync('0');
 		carddavsso_dav::recover('0');
+		carddavsso_dav::sync('0');
 		return $params;
 	}
 	function contact_create($parameters){
