@@ -11,8 +11,8 @@
         }
     ],
     "require": {
-        "php": ">5",
-        "roundcube/plugin-installer": "^0.1.3",
+        "php": ">8",
+        "roundcube/plugin-installer": "*",
         "sabre/vobject": "^4"
     }
 }
