@@ -1,6 +1,3 @@
 # carddavsso
-Synchronisation of the primary roundcube addressbook via carddav with sso.
-
-
-Step 1: Make sure you set the right dav server/path in the configuration
-Step 2: Enable the plugin
+This project is moved to codeberg: https://codeberg.org/windkracht8/carddavsso
+To move your clone: git remote set-url origin https://codeberg.org/windkracht8/carddavsso.git
